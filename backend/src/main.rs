@@ -300,14 +300,30 @@ fn parse_token_created(logs: &RpcLogsResponse, _program_id: Pubkey) -> Option<To
 }
 
 fn to_fixed_6(txt: &str) -> Result<u64> {
-    // TODO(student): parse a decimal string into an integer with 6 fixed decimals.
-    // Examples:
-    // - "120" -> 120_000_000
-    // - "120.12" -> 120_120_000
-    // - "0.000001" -> 1
-    // Extra digits after the 6th decimal place should be truncated, not rounded.
-    let _ = txt;
-    todo!("student task: implement fixed-6 parser")
+    let mut parts = txt.trim().split('.');
+    let int_part_txt = parts
+        .next()
+        .ok_or_else(|| anyhow!("invalid number format"))?;
+    let frac_part_txt = parts.next().unwrap_or("");
+    if parts.next().is_some() {
+        return Err(anyhow!("invalid number format"));
+    }
+
+    let int_part: u64 = int_part_txt.parse().context("invalid integer part")?;
+    let int_scaled = int_part
+        .checked_mul(1_000_000)
+        .ok_or_else(|| anyhow!("overflow while scaling integer part"))?;
+
+    if !frac_part_txt.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err(anyhow!("invalid fractional part"));
+    }
+    let frac_six: String = frac_part_txt.chars().take(6).collect();
+    let frac_padded = format!("{:0<6}", frac_six);
+    let frac_value: u64 = frac_padded.parse().context("invalid fractional part")?;
+
+    int_scaled
+        .checked_add(frac_value)
+        .ok_or_else(|| anyhow!("overflow while building fixed-6 value"))
 }
 
 #[cfg(test)]
@@ -338,9 +354,7 @@ mod tests {
 
     #[test]
     fn to_fixed_6_truncates_fraction_to_six_digits() {
-        // TODO(student): this assertion is intentionally wrong.
-        // The parser is expected to truncate after 6 digits instead of rounding.
-        assert_eq!(to_fixed_6("1.1234569").unwrap(), 1_123_457);
+        assert_eq!(to_fixed_6("1.1234569").unwrap(), 1_123_456);
     }
 
     #[test]
