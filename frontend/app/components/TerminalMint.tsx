@@ -218,7 +218,7 @@ export default function TerminalMint({ network, setNetwork, rpcUrl }: TerminalMi
         <span className="term-line">$ подключи кошелёк, чтобы отминтить SPL-токен (комиссия в SOL)</span>
         <span className="term-line term-muted">
           {network === "localnet"
-            ? "  → В кошельке укажи RPC http://127.0.0.1:8899 и пополни SOL."
+            ? "  → В кошельке укажи RPC http://.....ngrok-free.dev и пополни SOL."
             : "  → В кошельке выбери Devnet и пополни SOL (solana airdrop 2)."}
         </span>
         {!connected && (

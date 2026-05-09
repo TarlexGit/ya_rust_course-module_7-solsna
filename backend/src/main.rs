@@ -13,6 +13,7 @@ use solana_client::{
 use solana_rpc_client_types::config::{RpcTransactionLogsConfig, RpcTransactionLogsFilter};
 use solana_sdk::{
     commitment_config::CommitmentConfig,
+    hash::hash,
     instruction::Instruction,
     pubkey::Pubkey,
     signature::{read_keypair_file, Keypair, Signature, Signer},
@@ -266,6 +267,12 @@ async fn run_event_listener(cfg: Config) -> Result<()> {
 }
 
 fn parse_token_created(logs: &RpcLogsResponse, _program_id: Pubkey) -> Option<TokenCreatedLog> {
+    for log in &logs.logs {
+        if let Some(event) = parse_anchor_token_created(log, &logs.signature) {
+            return Some(event);
+        }
+    }
+
     let re = Regex::new(
         r"TokenCreated \{ creator: ([A-Za-z0-9]+), mint: ([A-Za-z0-9]+), decimals: (\d+), initial_supply: (\d+), fee_lamports: (\d+), sol_usd_price: (\d+), slot: (\d+) \}",
     )
@@ -297,6 +304,95 @@ fn parse_token_created(logs: &RpcLogsResponse, _program_id: Pubkey) -> Option<To
         }
     }
     None
+}
+
+fn parse_anchor_token_created(log_line: &str, signature: &str) -> Option<TokenCreatedLog> {
+    let b64 = log_line.strip_prefix("Program data: ")?;
+    let bytes = decode_base64(b64)?;
+
+    let discriminator = hash(b"event:TokenCreated").to_bytes();
+    if bytes.get(..8)? != &discriminator[..8] {
+        return None;
+    }
+
+    let payload = bytes.get(8..)?;
+    let mut offset = 0usize;
+
+    let creator = read_pubkey(payload, &mut offset)?.to_string();
+    let mint = read_pubkey(payload, &mut offset)?.to_string();
+    let decimals = *payload.get(offset)?;
+    offset += 1;
+    let initial_supply = read_u64(payload, &mut offset)?;
+    let fee_lamports = read_u64(payload, &mut offset)?;
+    let sol_usd_price = read_u64(payload, &mut offset)?;
+    let slot = read_u64(payload, &mut offset)?;
+
+    Some(TokenCreatedLog {
+        creator,
+        mint,
+        decimals,
+        initial_supply,
+        fee_lamports,
+        sol_usd_price,
+        slot,
+        signature: signature.to_string(),
+    })
+}
+
+fn read_pubkey(payload: &[u8], offset: &mut usize) -> Option<Pubkey> {
+    let bytes: [u8; 32] = payload.get(*offset..*offset + 32)?.try_into().ok()?;
+    *offset += 32;
+    Some(Pubkey::new_from_array(bytes))
+}
+
+fn read_u64(payload: &[u8], offset: &mut usize) -> Option<u64> {
+    let bytes: [u8; 8] = payload.get(*offset..*offset + 8)?.try_into().ok()?;
+    *offset += 8;
+    Some(u64::from_le_bytes(bytes))
+}
+
+fn decode_base64(input: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(input.len() * 3 / 4);
+    let mut chunk = [0u8; 4];
+    let mut chunk_len = 0usize;
+    let mut padding = 0usize;
+
+    for byte in input.bytes().filter(|b| !b.is_ascii_whitespace()) {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => {
+                padding += 1;
+                0
+            }
+            _ => return None,
+        };
+
+        chunk[chunk_len] = value;
+        chunk_len += 1;
+
+        if chunk_len == 4 {
+            out.push((chunk[0] << 2) | (chunk[1] >> 4));
+            if padding < 2 {
+                out.push((chunk[1] << 4) | (chunk[2] >> 2));
+            }
+            if padding == 0 {
+                out.push((chunk[2] << 6) | chunk[3]);
+            }
+
+            chunk_len = 0;
+            padding = 0;
+        }
+    }
+
+    if chunk_len == 0 {
+        Some(out)
+    } else {
+        None
+    }
 }
 
 fn to_fixed_6(txt: &str) -> Result<u64> {
