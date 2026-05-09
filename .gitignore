@@ -1,0 +1,49 @@
+# --- Solana / Anchor ---
+test-ledger/
+.anchor/
+**/*.rs.bk
+
+# --- Rust (workspace: program/, backend/) ---
+**/target/
+
+# --- Node (program/, frontend/) ---
+**/node_modules/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+*.tgz
+
+# --- Remix / frontend build ---
+**/.cache/
+**/build/
+**/public/build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Secrets & local env ---
+.env
+.env.local
+.env.*.local
+backend/.env
+!**/.env.example
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- IDE / tooling ---
+.idea/
+*.swp
+*.swo
+coverage/
+.eslintcache
+
+# --- Misc ---
+vendor/
+dist/
