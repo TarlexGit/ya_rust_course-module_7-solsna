@@ -148,11 +148,31 @@ export default function TerminalMint({ network, setNetwork, rpcUrl }: TerminalMi
       tx.partialSign(mintKeypair);
 
       const sig = await sendTransaction(tx, conn, {
-        skipPreflight: true,
-        preflightCommitment: "confirmed",
-        maxRetries: 3,
+        skipPreflight: false,
+        preflightCommitment: "processed",
+        maxRetries: 5,
       });
-      await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+      try {
+        await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+      } catch (confirmErr) {
+        const [statusResp, txResp] = await Promise.all([
+          conn.getSignatureStatuses([sig], { searchTransactionHistory: true }),
+          conn.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }),
+        ]);
+        const status = statusResp.value[0];
+        const errDetails =
+          status?.err != null
+            ? `status.err=${JSON.stringify(status.err)}`
+            : txResp?.meta?.err != null
+            ? `meta.err=${JSON.stringify(txResp.meta.err)}`
+            : "status unavailable";
+        const logs = txResp?.meta?.logMessages?.slice(-8).join(" | ") ?? "no logs";
+        throw new Error(
+          `unable to confirm transaction ${sig}: ${errDetails}; logs: ${logs}; cause: ${
+            confirmErr instanceof Error ? confirmErr.message : String(confirmErr)
+          }`
+        );
+      }
       setLastMinted({
         mint: mintKeypair.publicKey.toBase58(),
         name: tokenName.trim() || "Без названия",
