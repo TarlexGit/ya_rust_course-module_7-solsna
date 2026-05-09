@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // Run from repo root: node program/scripts/get-oracle-pda.js
 // Or from program/: node scripts/get-oracle-pda.js
-const anchor = require("@coral-xyz/anchor");
-const { PublicKey } = anchor.web3;
-const ORACLE_PROGRAM_ID = new PublicKey("4cuvLFFqhaKnTHfeq2FtTUvgudRSe7wq982fA9PBUqBU");
+import { PublicKey } from "@solana/web3.js";
+
+const fallbackProgramId = "7SjPCZFdcXPe2Z79eCJX2VtCrKLoqdhHYcYxaNxEjM9f";
+const rawProgramId = process.env.ORACLE_PROGRAM_ID ?? process.argv[2] ?? fallbackProgramId;
+const oracleProgramId = new PublicKey(rawProgramId);
+
 const [oraclePda] = PublicKey.findProgramAddressSync(
   [Buffer.from("oracle_state")],
-  ORACLE_PROGRAM_ID
+  oracleProgramId
 );
 console.log("ORACLE_STATE_PUBKEY=" + oraclePda.toBase58());
