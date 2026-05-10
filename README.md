@@ -2,98 +2,160 @@
 
 Учебный мини-лаунчпад на Solana + Anchor: два on-chain контракта (SOL/USD oracle и token minter), Rust backend для обновления цены и прослушки событий, а также Remix фронтенд (папка `frontend/`).
 
-## Структура
-- `program/` — Anchor workspace  
-  - `programs/sol_usd_oracle` — хранит цену SOL/USD (decimals = 6)  
-  - `programs/token_minter` — минтит SPL токены за комиссию в SOL, используя цену из oracle  
-  - `tests/` — Anchor TS тесты  
-- `backend/` — Rust сервис, который обновляет цену и слушает события `TokenCreated`
-- `frontend/` — Remix hello-world (React Router)
+## Что в проекте
 
-## Быстрый старт (локально)
+- `program/` — Anchor workspace с двумя программами:
+  - `programs/sol_usd_oracle` — хранит цену SOL/USD (`u64`, fixed-6).
+  - `programs/token_minter` — минтит токены и списывает комиссию в SOL по цене из oracle.
+  - `tests/` — LiteSVM тесты (`*.litesvm.ts`).
+- `backend/` — Rust сервис, который:
+  - обновляет oracle (`update_price`);
+  - слушает и декодирует события `TokenCreated`.
+- `frontend/` — UI для подключения кошелька, выбора сети и минта токена.
 
-1. **Validator**: запустить `solana-test-validator` (или `make validator`). Для отображения имени, тикера и картинки токена в кошельке используйте валидатор с клоном Metaplex: `make validator-metaplex` (клон программы Token Metadata с mainnet). Убедитесь, что `~/.config/solana/id.json` есть и профинансирован (`solana airdrop 1000` при необходимости).
+## Текущий статус
 
-2. **Программы**: собрать и задеплоить (ID программ берутся из keypair в `program/target/deploy/`; при первом деплое выполните `anchor keys sync`, затем пересоберите):
-   ```bash
-   make build
-   make deploy
-   ```
+- `program` LiteSVM тесты: рабочие.
+- `backend` unit-тесты: рабочие.
+- Localnet E2E: рабочий (`validator -> deploy -> init -> backend -> mint from UI`).
+- Devnet E2E: не выполнен (см. раздел ниже).
 
-3. **Инициализация**: один раз после деплоя инициализировать oracle и minter (скрипт выведет `ORACLE_STATE_PUBKEY` для `.env`):
-   ```bash
-   make init
-   ```
+## Быстрый запуск (localnet)
 
-## Деплой на Devnet
+### 1) Установка зависимостей
 
-На фронте есть переключатель **Localnet / Devnet**. Для тестов на devnet:
+```bash
+make install
+```
 
-1. Переключить CLI на devnet и пополнить кошелёк:
-   ```bash
-   solana config set --url devnet
-   solana airdrop 2
-   ```
+### 2) Поднять валидатор (отдельный терминал)
 
-2. Собрать и задеплоить на devnet:
-   ```bash
-   make deploy-devnet
-   ```
+```bash
+make validator
+```
 
-3. Инициализировать оракул и минтер на devnet (один раз):
-   ```bash
-   make init-devnet
-   ```
+Если нужен рендер метаданных в кошельке, вместо этого:
 
-4. В приложении выбрать сеть **Devnet**, в кошельке переключиться на Devnet — можно минтить. На devnet Metaplex уже есть, картинка в кошельке может отображаться (если URI доступен по HTTPS).
+```bash
+make validator-metaplex
+```
 
-4. **Backend**: скопировать `backend/.env.example` в `backend/.env`, подставить `ORACLE_STATE_PUBKEY` из вывода init-скрипта. Путь `BACKEND_KEYPAIR_PATH` поддерживает `~`:
-   ```bash
-   cd backend
-   cargo run
-   ```
-   Сервис будет периодически вызывать `update_price` и слушать события `TokenCreated`, выводя их в stdout в JSON.
+### 3) Сборка и деплой программ (второй терминал)
 
-5. **Фронтенд** (опционально):
-   ```bash
-   cd frontend
-   npm install && npm run dev
-   ```
-  Открыть http://localhost:7001.
+```bash
+solana config set --url localhost
+solana airdrop 10
+make build
+make deploy
+make init
+```
 
-6. **Тесты** (LiteSVM, без сети):
-   ```bash
-   cd program
-   anchor test
-   ```
-   Или `yarn litesvm` для запуска только тестов в `tests/*.litesvm.ts`.
+После `make init` сохранить `ORACLE_STATE_PUBKEY` из вывода.
 
-## Переменные окружения для backend
+### 4) Настроить backend
 
-См. `backend/.env.example`. Основные:
-- `SOLANA_RPC_HTTP`, `SOLANA_RPC_WS` — RPC локального валидатора или devnet/mainnet.
-- `ORACLE_PROGRAM_ID`, `MINTER_PROGRAM_ID` — из `anchor keys list` (после деплоя).
-- `ORACLE_STATE_PUBKEY` — PDA от seed `"oracle_state"`; выводится скриптом `program/scripts/init-local.js`.
-- `BACKEND_KEYPAIR_PATH` — keypair администратора оракула (поддерживается `~`).
-- Опционально: `MOCK_PRICE`, `PRICE_API_URL`, `PRICE_POLL_INTERVAL_SEC`.
+Скопировать шаблон и заполнить:
 
-## Метаданные токена (Metaplex)
+```bash
+cp backend/.env.example backend/.env
+```
 
-При минте можно передать `name`, `symbol` и `uri` — контракт создаёт запись Metaplex Token Metadata (имя, тикер, картинка в кошельке). Если передать пустое имя, метаданные не создаются (подходит для localnet без Metaplex). Для отображения в кошельке поднимайте валидатор с клоном Metaplex: `make validator-metaplex`, затем деплой и `init` как обычно.
+Минимально важные поля в `backend/.env`:
 
-## Основные ограничения
-- Все вычисления комиссии — integer math, `fee_lamports = mint_fee_usd * LAMPORTS_PER_SOL / price`.
-- Oracle price и mint_fee_usd хранятся с точностью 10^6.
-- Доступ к `update_price` только у oracle admin (backend keypair).
-- `mint_token` падает, если `price == 0` или fee/supply некорректны.
+- `SOLANA_RPC_HTTP=http://127.0.0.1:8899`
+- `SOLANA_RPC_WS=ws://127.0.0.1:8900`
+- `ORACLE_PROGRAM_ID=<your_oracle_program_id>`
+- `MINTER_PROGRAM_ID=<your_minter_program_id>`
+- `ORACLE_STATE_PUBKEY=<from_make_init>`
+- `BACKEND_KEYPAIR_PATH=~/.config/solana/id.json`
 
+### 5) Запустить backend (третий терминал)
 
----
+```bash
+RUST_LOG=info make backend
+```
 
-## Порядок запуска (локально)
+Ожидаемые признаки:
 
-1. `solana-test-validator`
-2. `cd program && anchor build && anchor deploy --provider.cluster localnet`
-3. `cd program && node scripts/init-local.js` — скопировать `ORACLE_STATE_PUBKEY` в `backend/.env`
-4. `cd backend && cargo run`
-5. `cd frontend && npm run dev` — открыть в браузере и покликать.
+- периодические логи `oracle price updated`;
+- после минта — лог события `TokenCreated`.
+
+### 6) Запустить frontend (четвертый терминал)
+
+```bash
+make frontend
+```
+
+Дальше в UI:
+
+- подключить кошелек;
+- выбрать `Localnet`;
+- выполнить `Mint Token`.
+
+### 7) Проверить тесты
+
+```bash
+make test
+```
+
+Также отдельно:
+
+```bash
+cd backend && cargo test
+```
+
+## Статус Devnet
+
+На текущем этапе интеграционный прогон Devnet не выполнен из-за ограничений публичной сети и окружения:
+
+- `solana airdrop` в Devnet стабильно отвечает rate-limit;
+- баланс fee payer остаётся `0 SOL`;
+- без баланса команды `make deploy-devnet` / `anchor deploy` не выполняются.
+
+Пример ошибки:
+
+```text
+Requesting airdrop of 0.5 SOL
+Error: airdrop request failed. This can happen when the rate limit is reached.
+```
+
+Когда Devnet SOL станет доступен, последовательность стандартная:
+
+```bash
+solana config set --url devnet
+make deploy-devnet
+make init-devnet
+RUST_LOG=info make backend-devnet
+```
+
+## Проверка и воспроизведение
+
+Стандартный набор команд для локальной проверки:
+
+```bash
+make test
+cd backend && cargo test
+make deploy
+make init
+RUST_LOG=info make backend
+```
+
+Ожидаемый результат:
+
+- LiteSVM тесты проходят без падений;
+- backend unit-тесты проходят;
+- после запуска backend в логах есть периодические `oracle price updated`;
+- после минта из UI в логах backend появляется `TokenCreated`.
+
+Перед публикацией проверяется, что приватные ключи не попали в git:
+
+```bash
+git status
+```
+
+## Ограничения и инварианты
+
+- Комиссия считается только через безопасную арифметику (`checked_*`).
+- Цена и комиссия хранятся в fixed-point (`decimals = 6`).
+- `update_price` доступен только авторизованному admin.
+- При stale oracle mint должен падать с ошибкой (`OracleStale`), без молчаливого retry.
