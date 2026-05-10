@@ -18,7 +18,7 @@
 - `program` LiteSVM тесты: рабочие.
 - `backend` unit-тесты: рабочие.
 - Localnet E2E: рабочий (`validator -> deploy -> init -> backend -> mint from UI`).
-- Devnet E2E: не выполнен (см. раздел ниже).
+- Devnet E2E: рабочий.
 
 ## Быстрый запуск (localnet)
 
@@ -104,29 +104,24 @@ make test
 cd backend && cargo test
 ```
 
-## Статус Devnet
+## Devnet deployment
 
-На текущем этапе интеграционный прогон Devnet не выполнен из-за ограничений публичной сети и окружения:
+Развёртывание и проверка в Devnet выполнены.
 
-- `solana airdrop` в Devnet стабильно отвечает rate-limit;
-- баланс fee payer остаётся `0 SOL`;
-- без баланса команды `make deploy-devnet` / `anchor deploy` не выполняются.
+| Component | Address |
+| --- | --- |
+| Oracle Program ID | `7SjPCZFdcXPe2Z79eCJX2VtCrKLoqdhHYcYxaNxEjM9f` |
+| Minter Program ID | `7twiuwVZXbPuHtLJWXvHDZuiAuH9zyVwKmkMDV3gC56K` |
+| Oracle state PDA | `9F7vt2Re4ijXCNrHu6MiDLkDsj8hbRbYKszTtcUofzso` |
 
-Пример ошибки:
+Backend на Devnet обновляет цену в oracle, а mint через frontend порождает событие `TokenCreated`, которое сервис успешно декодирует из логов.
 
-```text
-Requesting airdrop of 0.5 SOL
-Error: airdrop request failed. This can happen when the rate limit is reached.
-```
+## Successful Devnet
 
-Когда Devnet SOL станет доступен, последовательность стандартная:
-
-```bash
-solana config set --url devnet
-make deploy-devnet
-make init-devnet
-RUST_LOG=info make backend-devnet
-```
+- [Mint #0](https://explorer.solana.com/tx/4BgYW8LCbN4riQkdtp17stmxu1EsxVVpRfgm27rDwRKAvNhveX1SvZA5SCghCe3mPwP8uNo3QAHGVTsYfU1SqcFg?cluster=devnet) - mint `HdRrsspkikc7fe7RxC9uyNcrYUi7EW7qM8dEJggm8eNt`
+- [Mint #1](https://explorer.solana.com/tx/6JQKbHbXiezPUQQ9DLHDnYBnDUgf1FpSoJ7fFfeeoAp3L98gNwGnSvrMfmjpM378MpVCwPMYEhPTmBBBeZm8hFZ?cluster=devnet) - mint `J4CsW8VdPSBnBJb8ticoFxa9RUbpeWJZ7WrdKcUK9khR`
+- [Mint #2](https://explorer.solana.com/tx/2mUWosPcUx1jgRjxFmmgUGVXJ77EcwmuTtKjJLLPJu5ZQS6w6pf757CedegRD2MyZTcsHJhXwuGQF1yoKeKHT6yM?cluster=devnet) - mint `HNptSxn7YQA9otVnJPGPmJMnJHDBnBA1potxRKSM2hTN`
+- [Mint #3](https://explorer.solana.com/tx/qCP4hb51VxZPRdGVZmouEoGuRwgM99AczWwFKngZiWxnAuGrPPeVDYjHzsFsKWFKiQuMjHH3a8dcbiQKymwwhcp?cluster=devnet) - mint `6tfT6mnY9rPpawSXP8JPSaYuefQuNMeiTwczFQn4MqL6`
 
 ## Проверка и воспроизведение
 
